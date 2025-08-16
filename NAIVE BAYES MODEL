@@ -1,0 +1,97 @@
+from collections import defaultdict
+import math
+
+# Dataset
+data = [
+    # LeafSize, Color, HasFlowers, Climate, PlantType
+    ['small', 'green', 'yes', 'tropical', 'herb'],
+    ['large', 'darkgreen', 'no', 'temperate', 'tree'],
+    ['medium', 'green', 'yes', 'tropical', 'shrub'],
+    ['large', 'yellow', 'no', 'arid', 'cactus'],
+    ['small', 'green', 'no', 'temperate', 'moss'],
+    ['medium', 'yellow', 'yes', 'tropical', 'shrub'],
+    ['small', 'green', 'yes', 'arid', 'herb'],
+    ['large', 'darkgreen', 'no', 'tropical', 'tree'],
+    ['medium', 'green', 'no', 'temperate', 'shrub'],
+    ['small', 'yellow', 'yes', 'tropical', 'herb'],
+    ['large', 'green', 'yes', 'arid', 'cactus'],
+    ['medium', 'darkgreen', 'yes', 'temperate', 'tree'],
+    ['small', 'green', 'no', 'arid', 'moss'],
+    ['large', 'yellow', 'no', 'temperate', 'cactus']
+]
+
+features_names = ['LeafSize', 'Color', 'HasFlowers', 'Climate']
+target_name = 'PlantType'
+
+# Get unique classes
+classes = set(row[-1] for row in data)
+
+# Calculate prior probabilities P(Class)
+class_counts = defaultdict(int)
+for row in data:
+    class_counts[row[-1]] += 1
+total_samples = len(data)
+priors = {cls: class_counts[cls] / total_samples for cls in classes}
+
+# Calculate likelihoods P(feature_value | Class)
+# We count frequency of each feature value given the class
+feature_value_counts = {cls: [defaultdict(int) for _ in features_names] for cls in classes}
+feature_counts_per_class = {cls: 0 for cls in classes}
+
+for row in data:
+    cls = row[-1]
+    feature_counts_per_class[cls] += 1
+    for i, val in enumerate(row[:-1]):
+        feature_value_counts[cls][i][val] += 1
+
+# Laplace smoothing helper
+def likelihood(feature_index, feature_val, cls):
+    # Count how many times feature_val occurs for class cls
+    count = feature_value_counts[cls][feature_index][feature_val] if feature_val in feature_value_counts[cls][feature_index] else 0
+    # Number of unique values for this feature (needed for smoothing)
+    unique_vals = set(row[feature_index] for row in data)
+    total = feature_counts_per_class[cls]
+    # Laplace smoothing:
+    return (count + 1) / (total + len(unique_vals))
+
+# Prediction function
+def predict(sample):
+    posteriors = {}
+    for cls in classes:
+        prior_log = math.log(priors[cls])
+        likelihood_log_sum = 0
+        for i, val in enumerate(sample):
+            p = likelihood(i, val, cls)
+            likelihood_log_sum += math.log(p)
+        posteriors[cls] = prior_log + likelihood_log_sum
+
+    # Convert log-posteriors to normal probabilities
+    max_log = max(posteriors.values())
+    exp_probs = {cls: math.exp(score - max_log) for cls, score in posteriors.items()}
+    total_prob = sum(exp_probs.values())
+    normalized_probs = {cls: prob / total_prob for cls, prob in exp_probs.items()}
+    return normalized_probs
+
+# Query sample to predict
+query = ['small', 'green', 'yes', 'tropical']
+
+# Predict probabilities
+probs = predict(query)
+
+print("Posterior Probabilities:")
+for cls, prob in probs.items():
+    print(f"P(PlantType = {cls} | {dict(zip(features_names, query))}) = {prob:.4f}")
+
+final_prediction = max(probs, key=probs.get)
+print(f"\nFinal Prediction: PlantType = {final_prediction}")
+
+OUTPUT :
+
+Posterior Probabilities:
+P(PlantType = herb | {'LeafSize': 'small', 'Color': 'green', 'HasFlowers': 'yes', 'Climate': 'tropical'}) = 0.7502
+P(PlantType = tree | {'LeafSize': 'small', 'Color': 'green', 'HasFlowers': 'yes', 'Climate': 'tropical'}) = 0.0208
+P(PlantType = moss | {'LeafSize': 'small', 'Color': 'green', 'HasFlowers': 'yes', 'Climate': 'tropical'}) = 0.0675
+P(PlantType = shrub | {'LeafSize': 'small', 'Color': 'green', 'HasFlowers': 'yes', 'Climate': 'tropical'}) = 0.1407
+P(PlantType = cactus | {'LeafSize': 'small', 'Color': 'green', 'HasFlowers': 'yes', 'Climate': 'tropical'}) = 0.0208
+
+Final Prediction: PlantType = herb
